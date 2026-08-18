@@ -23,6 +23,19 @@ function resolveConversationId(conversationId) {
   return randomUUID();
 }
 
+function initializeMessageVersions(message) {
+  if (message.versions.length > 0) {
+    return;
+  }
+
+  message.versions.push({
+    content: message.content,
+    createdAt: message.createdAt,
+  });
+
+  message.activeVersionIndex = 0;
+}
+
 export async function saveMessagePair({
   conversationId,
   userMessage,
@@ -54,6 +67,13 @@ export async function saveMessagePair({
             {
               role: "assistant",
               content: assistantReply,
+              versions: [
+                {
+                  content: assistantReply,
+                  createdAt: assistantCreatedAt,
+                },
+              ],
+              activeVersionIndex: 0,
               createdAt: assistantCreatedAt,
             },
           ],
@@ -106,4 +126,148 @@ export async function findConversationSummaries() {
       },
     },
   ]);
+}
+
+export async function findRegenerationTarget({
+  conversationId,
+  messageId,
+}) {
+  const conversation = await Conversation.findOne({
+    conversationId,
+  });
+
+  if (!conversation) {
+    return null;
+  }
+
+  const assistantMessage =
+    conversation.messages.id(messageId);
+
+  if (
+    !assistantMessage ||
+    assistantMessage.role !== "assistant"
+  ) {
+    return null;
+  }
+
+  const assistantMessageIndex =
+    conversation.messages.findIndex(
+      (message) =>
+        message._id.toString() === messageId,
+    );
+
+  let userMessage = null;
+
+  for (
+    let index = assistantMessageIndex - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    if (conversation.messages[index].role === "user") {
+      userMessage = conversation.messages[index];
+      break;
+    }
+  }
+
+  if (!userMessage) {
+    return null;
+  }
+
+  return {
+    userPrompt: userMessage.content,
+  };
+}
+
+export async function addAssistantMessageVersion({
+  conversationId,
+  messageId,
+  content,
+}) {
+  const conversation = await Conversation.findOne({
+    conversationId,
+  });
+
+  if (!conversation) {
+    return null;
+  }
+
+  const assistantMessage =
+    conversation.messages.id(messageId);
+
+  if (
+    !assistantMessage ||
+    assistantMessage.role !== "assistant"
+  ) {
+    return null;
+  }
+
+  initializeMessageVersions(assistantMessage);
+
+  assistantMessage.versions.push({
+    content,
+    createdAt: new Date(),
+  });
+
+  assistantMessage.activeVersionIndex =
+    assistantMessage.versions.length - 1;
+
+  assistantMessage.content = content;
+
+  await conversation.save();
+
+  return assistantMessage;
+}
+
+export async function selectAssistantMessageVersion({
+  conversationId,
+  messageId,
+  versionIndex,
+}) {
+  const conversation = await Conversation.findOne({
+    conversationId,
+  });
+
+  if (!conversation) {
+    return {
+      status: "not_found",
+      message: null,
+    };
+  }
+
+  const assistantMessage =
+    conversation.messages.id(messageId);
+
+  if (
+    !assistantMessage ||
+    assistantMessage.role !== "assistant"
+  ) {
+    return {
+      status: "not_found",
+      message: null,
+    };
+  }
+
+  initializeMessageVersions(assistantMessage);
+
+  if (
+    versionIndex < 0 ||
+    versionIndex >= assistantMessage.versions.length
+  ) {
+    return {
+      status: "invalid_version",
+      message: null,
+    };
+  }
+
+  assistantMessage.activeVersionIndex = versionIndex;
+
+  assistantMessage.content =
+    assistantMessage.versions[versionIndex].content;
+
+  await conversation.save();
+
+  return {
+    status: "updated",
+    message: assistantMessage,
+  };
 }

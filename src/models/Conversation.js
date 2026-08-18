@@ -1,5 +1,22 @@
 import mongoose from "mongoose";
 
+const messageVersionSchema = new mongoose.Schema(
+  {
+    content: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    _id: true,
+  },
+);
+
 const messageSchema = new mongoose.Schema(
   {
     role: {
@@ -11,6 +28,15 @@ const messageSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    versions: {
+      type: [messageVersionSchema],
+      default: [],
+    },
+    activeVersionIndex: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     createdAt: {
       type: Date,
