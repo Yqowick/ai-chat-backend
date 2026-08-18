@@ -10,15 +10,17 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey });
 
+const generationConfig = {
+  temperature: 0.7,
+  systemInstruction:
+    "You are a helpful AI assistant. Answer clearly and concisely.",
+};
+
 export async function generateChatResponse(message) {
   const response = await ai.models.generateContent({
     model,
     contents: message,
-    config: {
-      temperature: 0.7,
-      systemInstruction:
-        "You are a helpful AI assistant. Answer clearly and concisely.",
-    },
+    config: generationConfig,
   });
 
   const reply = response.text?.trim();
@@ -28,4 +30,12 @@ export async function generateChatResponse(message) {
   }
 
   return reply;
+}
+
+export async function generateChatResponseStream(message) {
+  return ai.models.generateContentStream({
+    model,
+    contents: message,
+    config: generationConfig,
+  });
 }
