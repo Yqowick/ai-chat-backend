@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+
 import { Conversation } from "../models/Conversation.js";
 
 function createConversationTitle(message) {
@@ -12,7 +13,10 @@ function createConversationTitle(message) {
 }
 
 function resolveConversationId(conversationId) {
-  if (typeof conversationId === "string" && conversationId.trim()) {
+  if (
+    typeof conversationId === "string" &&
+    conversationId.trim()
+  ) {
     return conversationId.trim();
   }
 
@@ -24,7 +28,9 @@ export async function saveMessagePair({
   userMessage,
   assistantReply,
 }) {
-  const resolvedConversationId = resolveConversationId(conversationId);
+  const resolvedConversationId =
+    resolveConversationId(conversationId);
+
   const userCreatedAt = new Date();
   const assistantCreatedAt = new Date();
 
@@ -69,4 +75,35 @@ export async function findConversationById(conversationId) {
   return Conversation.findOne({
     conversationId,
   }).lean();
+}
+
+export async function findConversationSummaries() {
+  return Conversation.aggregate([
+    {
+      $sort: {
+        updatedAt: -1,
+      },
+    },
+    {
+      $limit: 100,
+    },
+    {
+      $project: {
+        _id: 0,
+        conversationId: 1,
+        title: 1,
+        messageCount: {
+          $size: "$messages",
+        },
+        lastMessage: {
+          $arrayElemAt: [
+            "$messages",
+            -1,
+          ],
+        },
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    },
+  ]);
 }
