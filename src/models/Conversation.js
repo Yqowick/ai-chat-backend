@@ -17,6 +17,33 @@ const messageVersionSchema = new mongoose.Schema(
   },
 );
 
+const messageFeedbackSchema = new mongoose.Schema(
+  {
+    rating: {
+      type: String,
+      enum: ["up", "down"],
+      required: true,
+    },
+    comment: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: "",
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
 const messageSchema = new mongoose.Schema(
   {
     role: {
@@ -37,6 +64,10 @@ const messageSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+    feedback: {
+      type: messageFeedbackSchema,
+      default: undefined,
     },
     createdAt: {
       type: Date,

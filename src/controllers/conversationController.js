@@ -4,6 +4,7 @@ import {
   findConversationSummaries,
   findRegenerationTarget,
   selectAssistantMessageVersion,
+  updateAssistantMessageFeedback,
 } from "../services/conversationService.js";
 import { generateChatResponse } from "../services/geminiService.js";
 
@@ -12,6 +13,19 @@ function mapMessageVersion(version) {
     id: version._id.toString(),
     content: version.content,
     createdAt: version.createdAt,
+  };
+}
+
+function mapMessageFeedback(feedback) {
+  if (!feedback) {
+    return undefined;
+  }
+
+  return {
+    rating: feedback.rating,
+    comment: feedback.comment || "",
+    createdAt: feedback.createdAt,
+    updatedAt: feedback.updatedAt,
   };
 }
 
@@ -51,6 +65,10 @@ function mapConversationMessage(message) {
     activeVersionIndex:
       message.role === "assistant"
         ? activeVersionIndex
+        : undefined,
+    feedback:
+      message.role === "assistant"
+        ? mapMessageFeedback(message.feedback)
         : undefined,
   };
 }
@@ -214,6 +232,66 @@ export async function switchMessageVersion(
     return res.status(200).json({
       conversationId,
       message: mapConversationMessage(result.message),
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function submitMessageFeedback(
+  req,
+  res,
+  next,
+) {
+  try {
+    const {
+      conversationId,
+      messageId,
+    } = req.params;
+
+    const {
+      rating,
+      comment = "",
+    } = req.body;
+
+    if (!["up", "down"].includes(rating)) {
+      return res.status(400).json({
+        error: 'rating must be either "up" or "down".',
+      });
+    }
+
+    if (typeof comment !== "string") {
+      return res.status(400).json({
+        error: "comment must be a string.",
+      });
+    }
+
+    const normalizedComment = comment.trim();
+
+    if (normalizedComment.length > 1000) {
+      return res.status(400).json({
+        error:
+          "comment must not contain more than 1000 characters.",
+      });
+    }
+
+    const updatedMessage =
+      await updateAssistantMessageFeedback({
+        conversationId,
+        messageId,
+        rating,
+        comment: normalizedComment,
+      });
+
+    if (!updatedMessage) {
+      return res.status(404).json({
+        error: "Assistant message not found.",
+      });
+    }
+
+    return res.status(200).json({
+      conversationId,
+      message: mapConversationMessage(updatedMessage),
     });
   } catch (error) {
     next(error);

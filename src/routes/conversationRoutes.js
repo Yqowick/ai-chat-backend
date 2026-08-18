@@ -4,6 +4,7 @@ import {
   getConversation,
   getConversations,
   regenerateMessage,
+  submitMessageFeedback,
   switchMessageVersion,
 } from "../controllers/conversationController.js";
 
@@ -20,6 +21,11 @@ router.post(
 router.patch(
   "/:conversationId/messages/:messageId/versions/:versionIndex",
   switchMessageVersion,
+);
+
+router.put(
+  "/:conversationId/messages/:messageId/feedback",
+  submitMessageFeedback,
 );
 
 export default router;

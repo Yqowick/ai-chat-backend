@@ -271,3 +271,42 @@ export async function selectAssistantMessageVersion({
     message: assistantMessage,
   };
 }
+
+export async function updateAssistantMessageFeedback({
+  conversationId,
+  messageId,
+  rating,
+  comment,
+}) {
+  const conversation = await Conversation.findOne({
+    conversationId,
+  });
+
+  if (!conversation) {
+    return null;
+  }
+
+  const assistantMessage =
+    conversation.messages.id(messageId);
+
+  if (
+    !assistantMessage ||
+    assistantMessage.role !== "assistant"
+  ) {
+    return null;
+  }
+
+  const now = new Date();
+
+  assistantMessage.feedback = {
+    rating,
+    comment,
+    createdAt:
+      assistantMessage.feedback?.createdAt || now,
+    updatedAt: now,
+  };
+
+  await conversation.save();
+
+  return assistantMessage;
+}
