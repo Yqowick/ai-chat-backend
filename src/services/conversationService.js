@@ -12,7 +12,9 @@ function createConversationTitle(message) {
   return `${normalizedMessage.slice(0, 57)}...`;
 }
 
-function resolveConversationId(conversationId) {
+function resolveConversationId(
+  conversationId,
+) {
   if (
     typeof conversationId === "string" &&
     conversationId.trim()
@@ -30,6 +32,7 @@ function initializeMessageVersions(message) {
 
   message.versions.push({
     content: message.content,
+    sources: message.sources ?? [],
     createdAt: message.createdAt,
   });
 
@@ -40,6 +43,7 @@ export async function saveMessagePair({
   conversationId,
   userMessage,
   assistantReply,
+  assistantSources = [],
 }) {
   const resolvedConversationId =
     resolveConversationId(conversationId);
@@ -47,51 +51,64 @@ export async function saveMessagePair({
   const userCreatedAt = new Date();
   const assistantCreatedAt = new Date();
 
-  const conversation = await Conversation.findOneAndUpdate(
-    {
-      conversationId: resolvedConversationId,
-    },
-    {
-      $setOnInsert: {
-        conversationId: resolvedConversationId,
-        title: createConversationTitle(userMessage),
+  const conversation =
+    await Conversation.findOneAndUpdate(
+      {
+        conversationId:
+          resolvedConversationId,
       },
-      $push: {
-        messages: {
-          $each: [
-            {
-              role: "user",
-              content: userMessage,
-              createdAt: userCreatedAt,
-            },
-            {
-              role: "assistant",
-              content: assistantReply,
-              versions: [
-                {
-                  content: assistantReply,
-                  createdAt: assistantCreatedAt,
-                },
-              ],
-              activeVersionIndex: 0,
-              createdAt: assistantCreatedAt,
-            },
-          ],
+      {
+        $setOnInsert: {
+          conversationId:
+            resolvedConversationId,
+          title:
+            createConversationTitle(
+              userMessage,
+            ),
+        },
+        $push: {
+          messages: {
+            $each: [
+              {
+                role: "user",
+                content: userMessage,
+                createdAt: userCreatedAt,
+              },
+              {
+                role: "assistant",
+                content: assistantReply,
+                sources: assistantSources,
+                versions: [
+                  {
+                    content: assistantReply,
+                    sources:
+                      assistantSources,
+                    createdAt:
+                      assistantCreatedAt,
+                  },
+                ],
+                activeVersionIndex: 0,
+                createdAt:
+                  assistantCreatedAt,
+              },
+            ],
+          },
         },
       },
-    },
-    {
-      new: true,
-      upsert: true,
-      runValidators: true,
-      setDefaultsOnInsert: true,
-    },
-  );
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+      },
+    );
 
   return conversation;
 }
 
-export async function findConversationById(conversationId) {
+export async function findConversationById(
+  conversationId,
+) {
   return Conversation.findOne({
     conversationId,
   }).lean();
@@ -132,9 +149,10 @@ export async function findRegenerationTarget({
   conversationId,
   messageId,
 }) {
-  const conversation = await Conversation.findOne({
-    conversationId,
-  });
+  const conversation =
+    await Conversation.findOne({
+      conversationId,
+    });
 
   if (!conversation) {
     return null;
@@ -153,18 +171,25 @@ export async function findRegenerationTarget({
   const assistantMessageIndex =
     conversation.messages.findIndex(
       (message) =>
-        message._id.toString() === messageId,
+        message._id.toString() ===
+        messageId,
     );
 
   let userMessage = null;
 
   for (
-    let index = assistantMessageIndex - 1;
+    let index =
+      assistantMessageIndex - 1;
     index >= 0;
     index -= 1
   ) {
-    if (conversation.messages[index].role === "user") {
-      userMessage = conversation.messages[index];
+    if (
+      conversation.messages[index].role ===
+      "user"
+    ) {
+      userMessage =
+        conversation.messages[index];
+
       break;
     }
   }
@@ -182,10 +207,12 @@ export async function addAssistantMessageVersion({
   conversationId,
   messageId,
   content,
+  sources = [],
 }) {
-  const conversation = await Conversation.findOne({
-    conversationId,
-  });
+  const conversation =
+    await Conversation.findOne({
+      conversationId,
+    });
 
   if (!conversation) {
     return null;
@@ -201,10 +228,13 @@ export async function addAssistantMessageVersion({
     return null;
   }
 
-  initializeMessageVersions(assistantMessage);
+  initializeMessageVersions(
+    assistantMessage,
+  );
 
   assistantMessage.versions.push({
     content,
+    sources,
     createdAt: new Date(),
   });
 
@@ -212,6 +242,7 @@ export async function addAssistantMessageVersion({
     assistantMessage.versions.length - 1;
 
   assistantMessage.content = content;
+  assistantMessage.sources = sources;
 
   await conversation.save();
 
@@ -223,9 +254,10 @@ export async function selectAssistantMessageVersion({
   messageId,
   versionIndex,
 }) {
-  const conversation = await Conversation.findOne({
-    conversationId,
-  });
+  const conversation =
+    await Conversation.findOne({
+      conversationId,
+    });
 
   if (!conversation) {
     return {
@@ -247,11 +279,14 @@ export async function selectAssistantMessageVersion({
     };
   }
 
-  initializeMessageVersions(assistantMessage);
+  initializeMessageVersions(
+    assistantMessage,
+  );
 
   if (
     versionIndex < 0 ||
-    versionIndex >= assistantMessage.versions.length
+    versionIndex >=
+      assistantMessage.versions.length
   ) {
     return {
       status: "invalid_version",
@@ -259,10 +294,19 @@ export async function selectAssistantMessageVersion({
     };
   }
 
-  assistantMessage.activeVersionIndex = versionIndex;
+  const selectedVersion =
+    assistantMessage.versions[
+      versionIndex
+    ];
+
+  assistantMessage.activeVersionIndex =
+    versionIndex;
 
   assistantMessage.content =
-    assistantMessage.versions[versionIndex].content;
+    selectedVersion.content;
+
+  assistantMessage.sources =
+    selectedVersion.sources ?? [];
 
   await conversation.save();
 
@@ -278,9 +322,10 @@ export async function updateAssistantMessageFeedback({
   rating,
   comment,
 }) {
-  const conversation = await Conversation.findOne({
-    conversationId,
-  });
+  const conversation =
+    await Conversation.findOne({
+      conversationId,
+    });
 
   if (!conversation) {
     return null;
@@ -302,7 +347,8 @@ export async function updateAssistantMessageFeedback({
     rating,
     comment,
     createdAt:
-      assistantMessage.feedback?.createdAt || now,
+      assistantMessage.feedback
+        ?.createdAt ?? now,
     updatedAt: now,
   };
 

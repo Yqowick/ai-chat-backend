@@ -1,48 +1,78 @@
 import mongoose from "mongoose";
 
-const messageVersionSchema = new mongoose.Schema(
-  {
-    content: {
-      type: String,
-      required: true,
-      trim: true,
+const messageSourceSchema =
+  new mongoose.Schema(
+    {
+      citationNumber: {
+        type: Number,
+        required: true,
+        min: 1,
+      },
+      title: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+      url: {
+        type: String,
+        required: true,
+        trim: true,
+      },
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
+    {
+      _id: false,
     },
-  },
-  {
-    _id: true,
-  },
-);
+  );
 
-const messageFeedbackSchema = new mongoose.Schema(
-  {
-    rating: {
-      type: String,
-      enum: ["up", "down"],
-      required: true,
+const messageVersionSchema =
+  new mongoose.Schema(
+    {
+      content: {
+        type: String,
+        required: true,
+        trim: true,
+      },
+      sources: {
+        type: [messageSourceSchema],
+        default: [],
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+      },
     },
-    comment: {
-      type: String,
-      trim: true,
-      maxlength: 1000,
-      default: "",
+    {
+      _id: true,
     },
-    createdAt: {
-      type: Date,
-      default: Date.now,
+  );
+
+const messageFeedbackSchema =
+  new mongoose.Schema(
+    {
+      rating: {
+        type: String,
+        enum: ["up", "down"],
+        required: true,
+      },
+      comment: {
+        type: String,
+        trim: true,
+        maxlength: 1000,
+        default: "",
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now,
+      },
+      updatedAt: {
+        type: Date,
+        default: Date.now,
+      },
     },
-    updatedAt: {
-      type: Date,
-      default: Date.now,
+    {
+      _id: false,
     },
-  },
-  {
-    _id: false,
-  },
-);
+  );
 
 const messageSchema = new mongoose.Schema(
   {
@@ -55,6 +85,10 @@ const messageSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    sources: {
+      type: [messageSourceSchema],
+      default: [],
     },
     versions: {
       type: [messageVersionSchema],
@@ -79,30 +113,31 @@ const messageSchema = new mongoose.Schema(
   },
 );
 
-const conversationSchema = new mongoose.Schema(
-  {
-    conversationId: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
+const conversationSchema =
+  new mongoose.Schema(
+    {
+      conversationId: {
+        type: String,
+        required: true,
+        unique: true,
+        trim: true,
+      },
+      title: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 120,
+      },
+      messages: {
+        type: [messageSchema],
+        default: [],
+      },
     },
-    title: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 120,
+    {
+      timestamps: true,
+      versionKey: false,
     },
-    messages: {
-      type: [messageSchema],
-      default: [],
-    },
-  },
-  {
-    timestamps: true,
-    versionKey: false,
-  },
-);
+  );
 
 export const Conversation = mongoose.model(
   "Conversation",

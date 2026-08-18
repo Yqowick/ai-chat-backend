@@ -8,10 +8,22 @@ import {
 } from "../services/conversationService.js";
 import { generateChatResponse } from "../services/geminiService.js";
 
+function mapSource(source) {
+  return {
+    citationNumber:
+      source.citationNumber,
+    title: source.title,
+    url: source.url,
+  };
+}
+
 function mapMessageVersion(version) {
   return {
     id: version._id.toString(),
     content: version.content,
+    sources:
+      version.sources?.map(mapSource) ??
+      [],
     createdAt: version.createdAt,
   };
 }
@@ -33,12 +45,19 @@ function mapConversationMessage(message) {
   const versions =
     message.role === "assistant"
       ? message.versions?.length > 0
-        ? message.versions.map(mapMessageVersion)
+        ? message.versions.map(
+            mapMessageVersion,
+          )
         : [
             {
               id: `${message._id.toString()}-original`,
               content: message.content,
-              createdAt: message.createdAt,
+              sources:
+                message.sources?.map(
+                  mapSource,
+                ) ?? [],
+              createdAt:
+                message.createdAt,
             },
           ]
       : undefined;
@@ -49,9 +68,13 @@ function mapConversationMessage(message) {
       : 0;
 
   const activeVersionIndex =
-    typeof message.activeVersionIndex === "number"
+    typeof message.activeVersionIndex ===
+    "number"
       ? Math.min(
-          Math.max(message.activeVersionIndex, 0),
+          Math.max(
+            message.activeVersionIndex,
+            0,
+          ),
           maximumVersionIndex,
         )
       : 0;
@@ -61,6 +84,12 @@ function mapConversationMessage(message) {
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,
+    sources:
+      message.role === "assistant"
+        ? message.sources?.map(
+            mapSource,
+          ) ?? []
+        : undefined,
     versions,
     activeVersionIndex:
       message.role === "assistant"
@@ -68,91 +97,129 @@ function mapConversationMessage(message) {
         : undefined,
     feedback:
       message.role === "assistant"
-        ? mapMessageFeedback(message.feedback)
+        ? mapMessageFeedback(
+            message.feedback,
+          )
         : undefined,
   };
 }
 
-export async function getConversations(req, res, next) {
+export async function getConversations(
+  req,
+  res,
+  next,
+) {
   try {
     const conversations =
       await findConversationSummaries();
 
-    const conversationSummaries = conversations.map(
-      (conversation) => ({
-        conversationId: conversation.conversationId,
-        title: conversation.title,
-        messageCount: conversation.messageCount,
-        lastMessage: conversation.lastMessage
-          ? {
-              role: conversation.lastMessage.role,
-              content: conversation.lastMessage.content,
-              createdAt: conversation.lastMessage.createdAt,
-            }
-          : null,
-        createdAt: conversation.createdAt,
-        updatedAt: conversation.updatedAt,
-      }),
-    );
+    const conversationSummaries =
+      conversations.map(
+        (conversation) => ({
+          conversationId:
+            conversation.conversationId,
+          title: conversation.title,
+          messageCount:
+            conversation.messageCount,
+          lastMessage:
+            conversation.lastMessage
+              ? {
+                  role:
+                    conversation
+                      .lastMessage.role,
+                  content:
+                    conversation
+                      .lastMessage.content,
+                  createdAt:
+                    conversation
+                      .lastMessage
+                      .createdAt,
+                }
+              : null,
+          createdAt:
+            conversation.createdAt,
+          updatedAt:
+            conversation.updatedAt,
+        }),
+      );
 
     return res.status(200).json({
-      conversations: conversationSummaries,
+      conversations:
+        conversationSummaries,
     });
   } catch (error) {
     next(error);
   }
 }
 
-export async function getConversation(req, res, next) {
+export async function getConversation(
+  req,
+  res,
+  next,
+) {
   try {
-    const { conversationId } = req.params;
+    const { conversationId } =
+      req.params;
 
     if (
-      typeof conversationId !== "string" ||
+      typeof conversationId !==
+        "string" ||
       !conversationId.trim()
     ) {
       return res.status(400).json({
-        error: "A valid conversationId is required.",
+        error:
+          "A valid conversationId is required.",
       });
     }
 
-    const conversation = await findConversationById(
-      conversationId.trim(),
-    );
+    const conversation =
+      await findConversationById(
+        conversationId.trim(),
+      );
 
     if (!conversation) {
       return res.status(404).json({
-        error: "Conversation not found.",
+        error:
+          "Conversation not found.",
       });
     }
 
-    const messages = conversation.messages.map(
-      mapConversationMessage,
-    );
+    const messages =
+      conversation.messages.map(
+        mapConversationMessage,
+      );
 
     return res.status(200).json({
-      conversationId: conversation.conversationId,
+      conversationId:
+        conversation.conversationId,
       title: conversation.title,
       messages,
-      createdAt: conversation.createdAt,
-      updatedAt: conversation.updatedAt,
+      createdAt:
+        conversation.createdAt,
+      updatedAt:
+        conversation.updatedAt,
     });
   } catch (error) {
     next(error);
   }
 }
 
-export async function regenerateMessage(req, res, next) {
+export async function regenerateMessage(
+  req,
+  res,
+  next,
+) {
   try {
     const {
       conversationId,
       messageId,
     } = req.params;
 
-    const target = await findRegenerationTarget({
-      conversationId,
-      messageId,
-    });
+    const target =
+      await findRegenerationTarget({
+        conversationId,
+        messageId,
+      });
 
     if (!target) {
       return res.status(404).json({
@@ -161,25 +228,34 @@ export async function regenerateMessage(req, res, next) {
       });
     }
 
-    const regeneratedContent =
-      await generateChatResponse(target.userPrompt);
+    const generatedResponse =
+      await generateChatResponse(
+        target.userPrompt,
+      );
 
     const updatedMessage =
       await addAssistantMessageVersion({
         conversationId,
         messageId,
-        content: regeneratedContent,
+        content:
+          generatedResponse.content,
+        sources:
+          generatedResponse.sources,
       });
 
     if (!updatedMessage) {
       return res.status(404).json({
-        error: "Assistant message not found.",
+        error:
+          "Assistant message not found.",
       });
     }
 
     return res.status(200).json({
       conversationId,
-      message: mapConversationMessage(updatedMessage),
+      message:
+        mapConversationMessage(
+          updatedMessage,
+        ),
     });
   } catch (error) {
     next(error);
@@ -198,10 +274,13 @@ export async function switchMessageVersion(
       versionIndex,
     } = req.params;
 
-    const numericVersionIndex = Number(versionIndex);
+    const numericVersionIndex =
+      Number(versionIndex);
 
     if (
-      !Number.isInteger(numericVersionIndex) ||
+      !Number.isInteger(
+        numericVersionIndex,
+      ) ||
       numericVersionIndex < 0
     ) {
       return res.status(400).json({
@@ -214,24 +293,35 @@ export async function switchMessageVersion(
       await selectAssistantMessageVersion({
         conversationId,
         messageId,
-        versionIndex: numericVersionIndex,
+        versionIndex:
+          numericVersionIndex,
       });
 
-    if (result.status === "not_found") {
+    if (
+      result.status === "not_found"
+    ) {
       return res.status(404).json({
-        error: "Assistant message not found.",
+        error:
+          "Assistant message not found.",
       });
     }
 
-    if (result.status === "invalid_version") {
+    if (
+      result.status ===
+      "invalid_version"
+    ) {
       return res.status(400).json({
-        error: "The requested version does not exist.",
+        error:
+          "The requested version does not exist.",
       });
     }
 
     return res.status(200).json({
       conversationId,
-      message: mapConversationMessage(result.message),
+      message:
+        mapConversationMessage(
+          result.message,
+        ),
     });
   } catch (error) {
     next(error);
@@ -254,21 +344,30 @@ export async function submitMessageFeedback(
       comment = "",
     } = req.body;
 
-    if (!["up", "down"].includes(rating)) {
+    if (
+      !["up", "down"].includes(
+        rating,
+      )
+    ) {
       return res.status(400).json({
-        error: 'rating must be either "up" or "down".',
+        error:
+          'rating must be either "up" or "down".',
       });
     }
 
     if (typeof comment !== "string") {
       return res.status(400).json({
-        error: "comment must be a string.",
+        error:
+          "comment must be a string.",
       });
     }
 
-    const normalizedComment = comment.trim();
+    const normalizedComment =
+      comment.trim();
 
-    if (normalizedComment.length > 1000) {
+    if (
+      normalizedComment.length > 1000
+    ) {
       return res.status(400).json({
         error:
           "comment must not contain more than 1000 characters.",
@@ -285,13 +384,17 @@ export async function submitMessageFeedback(
 
     if (!updatedMessage) {
       return res.status(404).json({
-        error: "Assistant message not found.",
+        error:
+          "Assistant message not found.",
       });
     }
 
     return res.status(200).json({
       conversationId,
-      message: mapConversationMessage(updatedMessage),
+      message:
+        mapConversationMessage(
+          updatedMessage,
+        ),
     });
   } catch (error) {
     next(error);
