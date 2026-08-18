@@ -5,6 +5,7 @@ import {
   generateChatResponseStream,
 } from "../services/geminiService.js";
 import { saveMessagePair } from "../services/conversationService.js";
+import { getGeminiErrorDetails } from "../utils/geminiError.js";
 
 function validateChatRequest(message, conversationId) {
   if (typeof message !== "string" || !message.trim()) {
@@ -162,9 +163,12 @@ export async function streamMessage(req, res) {
   } catch (error) {
     console.error("Streaming error:", error);
 
+    const errorDetails = getGeminiErrorDetails(error);
+
     sendSseEvent(res, "error", {
-      message:
-        "Something went wrong while streaming the response.",
+      message: errorDetails.message,
+      code: errorDetails.code,
+      retryAfterSeconds: errorDetails.retryAfterSeconds,
     });
 
     res.end();
